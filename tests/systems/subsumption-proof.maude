@@ -1,0 +1,376 @@
+set include BOOL off .
+load ibos-preds.maude
+load ../../rltool-lib.maude
+
+--- STRATEGY:
+--- Instead of doing a subsumption proof, do a non-intersection proof,
+--- which agrees with what Ralf originally did
+--- and should be much easier to complete
+
+mod DEPS is
+  pr REMOVE-IDS .
+  pr CONSTRAINED-TERM-SPLIT .
+  pr PATTERN-OPS .
+  pr META-PARSE .
+  pr RENAME-TERM-AUX .
+  pr CONTEXT-REW .
+  pr RLTOOL .
+endm
+
+mod SUBSUMPTION-PROOF is
+  pr DEPS * (op metaMatch : Module Term Term Condition Nat -> Substitution? to metaMatchOrig,
+             op filterPolicy : Module TermPairSet EqAtom -> Bool to filterPolicy#,
+             op _|_ : QFCTermSet QFCTermSet -> QFCTermSet to __ [format (d nn d)]
+            ) .
+
+  op ibos : -> Module .
+  eq ibos = upModule('IBOS-PREDS,true) .
+
+  op ibos_ : String -> Term .
+  eq ibos S:String = stringToTerm(ibos,S:String) .
+
+  op safe-ibos : -> Module [memo] .
+  eq safe-ibos = removeIds(ibos,non-handled) .
+
+  op fvp-ibos : -> Module [memo] .
+  eq fvp-ibos = removeIds(upModule('IBOS-AUX-FVP,true),non-handled) .
+
+  ops new-sop sop1a sop1b sop2 sop3 sop4 : -> CCTerm .
+
+  ops form1a form1b form2 form3 form4 : -> QFCTermSet .
+
+  ---@ (  NWC
+  ---@    < ui | toKernel(UIML) >
+  ---@    < display | activeWebapp(WI), displayedContent(DISP) >
+  ---@    < nic | in(NICIN), nic-out(NICOUT) >
+  ---@    < webappmgr | nextWPN(NWP) >
+  ---@    < kernel | weblabels(WIS), netlabels(NIS), displayedTopBar(CURR), handledCurrently(MSG?), nextNPN(NNP),
+  ---@        msgPolicy(policy(webapp, network,MSG-FETCH-URL ),ps
+  ---@                  policy(ui,     webapp, MSG-NEW-URL   ),ps
+  ---@                  policy(ui,     webapp, MSG-SWITCH-TAB),ps
+  ---@                  policy(network,webapp, MSG-RETURN-URL)) > ) |
+  ---@    (p(NWC,WIS,NIS,MSG?))                                          = (true)  /\
+  ---@    (nwp-reqattrs?(NWC))                                           = (true)  /\
+  ---@    (conf-attr-dupl?(NWC))                                         = (false) /\
+  ---@    (weblabels-dupl?(WIS))                                         = (false) /\
+  ---@    (netlabels-dupl?(NIS))                                         = (false) /\
+  ---@    (conf-dupl?(NWC))                                              = (false) /\
+  ---@    (fresh-wp-id?(webapp(NWP), NWC))                               = (true)  /\
+  ---@    (fresh-np-id?(network(NNP),NWC))                               = (true)  /\
+  ---@    (fresh-weblabel?(webapp(NWP),WIS))                             = (true)  /\
+  ---@    (fresh-netlabel?(network(NNP),NIS))                            = (true)  /\
+  ---@    (ui-consistent?(UIML,WIS))                                     = (true)  /\
+  ---@    (currHandled2?(MSG?,WIS))                                      = (true)  /\
+  ---@    ---
+  ---@    (weblabel-by-pid(WI,WIS) ~l CURR)                              = (true)  /\
+  ---@    (display-topbar-consistent?(WI,DISP,CURR,NWC))                 = (true)  /\
+  ---@    (render-consistent?(NWC))                                      = (true)
+  ---@
+  eq new-sop = ( '__[
+                      '<_|_>['ui.NonPipeId,'toKernel['UIML:MessageList]],
+                      '<_|_>['display.NonPipeId,'_`,_['activeWebapp['WI:ConcWebProcId],'displayedContent['DISP:Label]]],
+                      '<_|_>['nic.NonPipeId,'_`,_['in['NICIN:LabelList],'nic-out['NICOUT:LabelSet]]],
+                      '<_|_>['webappmgr.NonPipeId,'nextWPN['NWP:Nat]],
+                      '<_|_>['kernel.NonPipeId,'_`,_[
+                              'weblabels['WIS:WebProcInfoSet],
+                              'netlabels['NIS:NetProcInfoSet],
+                              'displayedTopBar['CURR:Label],
+                              'handledCurrently['MSG?:Message?],
+                              'nextNPN['NNP:Nat],
+                              'msgPolicy['_`,ps_[
+                                'policy['webapp.AbsWebProcId,'network.AbsNetProcId,'MSG-FETCH-URL.MsgType],
+                                'policy['ui.UIId,'webapp.AbsWebProcId,'MSG-NEW-URL.MsgType],
+                                'policy['ui.UIId,'webapp.AbsWebProcId,'MSG-SWITCH-TAB.MsgType],
+                                'policy['network.AbsNetProcId,'webapp.AbsWebProcId,'MSG-RETURN-URL.MsgType]
+                              ]]
+                            ]],
+                      'NWC:NetWebProcConfig
+                    ] |
+                    'p['NWC:NetWebProcConfig,'WIS:WebProcInfoSet,'NIS:NetProcInfoSet,'MSG?:Message?] ?= 'true.Bool
+                 /\ 'nwp-reqattrs?['NWC:NetWebProcConfig] ?= 'true.Bool
+                 /\ 'conf-attr-dupl?['NWC:NetWebProcConfig] ?= 'false.Bool
+                 /\ 'weblabels-dupl?['WIS:WebProcInfoSet] ?= 'false.Bool
+                 /\ 'netlabels-dupl?['NIS:NetProcInfoSet] ?= 'false.Bool
+                 /\ 'conf-dupl?['NWC:NetWebProcConfig] ?= 'false.Bool
+                 /\ 'fresh-wp-id?['webapp['NWP:Nat],'NWC:NetWebProcConfig] ?= 'true.Bool
+                 /\ 'fresh-np-id?['network['NNP:Nat],'NWC:NetWebProcConfig] ?= 'true.Bool
+                 /\ 'fresh-weblabel?['webapp['NWP:Nat],'WIS:WebProcInfoSet] ?= 'true.Bool
+                 /\ 'fresh-netlabel?['network['NNP:Nat],'NIS:NetProcInfoSet] ?= 'true.Bool
+                 /\ 'ui-consistent?['UIML:MessageList,'WIS:WebProcInfoSet] ?= 'true.Bool
+                 /\ 'currHandled2?['MSG?:Message?,'WIS:WebProcInfoSet] ?= 'true.Bool
+                 /\ 'in-wis?['pi['WI:ConcWebProcId,'CURR:Label],'WIS:WebProcInfoSet] ?= 'true.Bool
+                 /\ 'display-topbar-consistent?['WI:ConcWebProcId,'DISP:Label,'CURR:Label,'NWC:NetWebProcConfig] ?= 'true.Bool
+                 /\ 'render-consistent?['NWC:NetWebProcConfig] ?= 'true.Bool
+               ) .
+
+  --- use strategy from request-from-webapp rule to guide splits
+  --- < N      | fromKernel(msg(W, N, MSG-FETCH-URL, L1), ML),              A  >
+  --- < kernel | weblabels(pi(W,L1'), WIS), netlabels(pi(N, L2', L2), NIS), A' >
+  ---
+  --- such that L1 =/= L2 or L1' =/= L2'
+  eq sop1a = ('__[
+                   '<_|_>['N:ConcNetProcId,
+                          '_`,_['fromKernel[
+                                '_@_['msg['W:ConcWebProcId,'N:ConcNetProcId,'MSG-FETCH-URL.MsgType,'L1:Label],
+                                     'ML:MessageList
+                                    ]
+                                ],
+                                'A:AttributeSet
+                               ]
+                         ],
+                   '<_|_>['kernel.NonPipeId,
+                          '_`,_['weblabels['_`,wp_['pi['W:ConcWebProcId,'L1':Label],'WIS:WebProcInfoSet]],
+                                'netlabels['_`,np_['pi['N:ConcNetProcId,'L2':Label,'L2:Label],'NIS:NetProcInfoSet]],
+                                'A':AttributeSet
+                               ]
+                         ],
+                   'C:Configuration
+                 ] | '_~l_['L1:Label,'L2:Label] ?= 'false.Bool) .
+	
+  eq sop1b = ('__[
+                   '<_|_>['N:ConcNetProcId,
+                          '_`,_['fromKernel[
+                                '_@_['msg['W:ConcWebProcId,'N:ConcNetProcId,'MSG-FETCH-URL.MsgType,'L1:Label],
+                                     'ML:MessageList
+                                    ]
+                                ],
+                                'A:AttributeSet
+                               ]
+                         ],
+                   '<_|_>['kernel.NonPipeId,
+                          '_`,_['weblabels['_`,wp_['pi['W:ConcWebProcId,'L1':Label],'WIS:WebProcInfoSet]],
+                                'netlabels['_`,np_['pi['N:ConcNetProcId,'L2':Label,'L2:Label],'NIS:NetProcInfoSet]],
+                                'A':AttributeSet
+                               ]
+                         ],
+                   'C:Configuration
+                 ] | '_~l_['L1':Label,'L2':Label] ?= 'false.Bool ) .
+
+  --- < N      | in(L1, LL),                   A  >
+  --- < kernel | netlabels(pi(N, L, L2), NIS), A' >
+  ---
+  --- such that L1 =/= L2
+  eq sop2 = ('__[
+                   '<_|_>['N:ConcNetProcId,
+                          '_`,_['in['_;_['L1:Label,'LL:LabelList]],
+                                'A:AttributeSet
+                               ]
+                         ],
+                   '<_|_>['kernel.NonPipeId,
+                          '_`,_['netlabels['_`,np_['pi['N:ConcNetProcId,'L:Label,'L2:Label],'NIS:NetProcInfoSet]],
+                                'A':AttributeSet
+                               ]
+                         ],
+                   'C:Configuration
+                 ] | '_~l_['L1:Label,'L2:Label] ?= 'false.Bool ) .
+
+  --- < N      | out(L1),                       A  >
+  --- < kernel | netlabels(pi(N, L, L2), NIS), A' >
+  ---
+  --- such that L1 =/= L2
+  eq sop3 = ('__[
+                   '<_|_>['N:ConcNetProcId,
+                          '_`,_['out['L1:Label],
+                                'A:AttributeSet
+                               ]
+                         ],
+                   '<_|_>['kernel.NonPipeId,
+                          '_`,_['netlabels['_`,np_['pi['N:ConcNetProcId,'L:Label,'L2:Label],'NIS:NetProcInfoSet]],
+                                'A':AttributeSet
+                               ]
+                         ],
+                   'C:Configuration
+                 ] | '_~l_['L1:Label,'L2:Label] ?= 'false.Bool ) .
+
+  --- < W      | loading(true), fromKernel(msg(N, W, MSG-RETURN-URL, L2), ML), A  >
+  --- < kernel | weblabels(pi(W, L), WIS), netlabels(pi(N, L, L1), NIS),       A' >
+  ---
+  --- such that L1 =/= L2
+  eq sop4 = ('__[
+                   '<_|_>['W:ConcWebProcId,
+                          '_`,_['loading['on.OnOffFlag],
+                                'fromKernel[
+                                '_@_['msg['N:ConcNetProcId,'W:ConcWebProcId,'MSG-RETURN-URL.MsgType,'L1:Label],
+                                     'ML:MessageList
+                                    ]
+                                ],
+                                'A:AttributeSet
+                               ]
+                         ],
+                   '<_|_>['kernel.NonPipeId,
+                          '_`,_['weblabels['_`,wp_['pi['W:ConcWebProcId,'L:Label],'WIS:WebProcInfoSet]],
+                                'netlabels['_`,np_['pi['N:ConcNetProcId,'L:Label,'L2:Label],'NIS:NetProcInfoSet]],
+                                'A':AttributeSet
+                               ]
+                         ],
+                   'C:Configuration
+                 ] | '_~l_['L1:Label,'L2:Label] ?= 'false.Bool ) .
+
+  var U : Module .
+  var C C' : QFCTerm .
+  var CS CS' : QFCTermSet .
+  var T T' : Term .
+  var TS : TermSet .
+  var CL : CmdList .
+  var N : Nat .
+  var SG : String .
+
+  op Intersect : QFCTerm QFCTerm -> QFCTermSet .
+  ----------------------------------------------
+  eq Intersect(C,C') = renameVars(maximalTermSet(ibos,disjIntersect(safe-ibos,C,C'))) .
+
+  op vu : QFCTermSet -> QFCTermSet .
+  ----------------------------------
+  eq vu(CS) = renameVars(maximalTermSet(ibos,toCCTermSet(basicSimplify(ibos,varUnifSimp(fvp-ibos,CS))))) .
+
+  op cu : QFCTermSet -> QFCTermSet .
+  op cu : QFCTermSet QFCTermSet -> QFCTermSet .
+  eq cu(CS) = cu(CS,noterm) .
+  eq cu(C CS,  CS') = cu(CS,CS' if cr-unsat(ibos,cond(C)) == true then noterm else C fi) .
+  eq cu(noterm,CS') = CS' .
+
+  op saf : QFCTermSet Term Term TermSet -> QFCTermSet .
+  op saf : QFCTermSet QFCTerm Term TermSet -> QFCTermSet .
+  --------------------------------------------------------
+  eq saf(CS,T,T',TS) = saf(CS,(T | mtForm),T',TS) .
+  eq saf(CS,C,T',TS) = split-by-cover(ibos,CS,C,T',TS) .
+
+  op sbf : QFCTermSet Term Term -> QFCTermSet .
+  op sbf : QFCTermSet QFCTerm Term -> QFCTermSet .
+  ------------------------------------------------
+  eq sbf(CS,T,T') = sbf(CS,(T | mtForm),T') .
+  eq sbf(CS,C,T') = split-by-cover(ibos,CS,C,T','true.Bool | 'false.Bool) .
+
+  sort Cmd CmdList .
+  subsort Cmd < CmdList .
+  op sbf : Term    Term         -> Cmd [ctor] .
+  op sbf : QFCTerm Term         -> Cmd [ctor] .
+  op saf : Term    Term TermSet -> Cmd [ctor] .
+  op saf : QFCTerm Term TermSet -> Cmd [ctor] .
+  op vu  :                      -> Cmd [ctor] .
+  op cu  :                      -> Cmd [ctor] .
+  op __ : CmdList CmdList -> CmdList [ctor assoc id: nil] .
+  op nil : -> CmdList [ctor] .
+
+  op transform : QFCTermSet CmdList -> QFCTermSet .
+  -------------------------------------------------
+  eq transform(noterm,         CL) = noterm [print "Finished with CL: " CL] .
+  eq transform(CS,sbf(T,T')    CL) = transform(debugPrintSize("SBF",sbf(CS,T,T')),CL) .
+  eq transform(CS,sbf(C,T')    CL) = transform(debugPrintSize("SBF",sbf(CS,C,T')),CL) .
+  eq transform(CS,saf(T,T',TS) CL) = transform(saf(CS,T,T',TS),CL) .
+  eq transform(CS,saf(C,T',TS) CL) = transform(saf(CS,C,T',TS),CL) .
+  eq transform(CS,vu           CL) = transform(debugPrintSize("VU",vu(CS)),CL) .
+  eq transform(CS,cu           CL) = transform(debugPrintSize("CU",cu(CS)),CL) .
+  eq transform(CS,            nil) = CS .
+
+  op debugPrintSize : String QFCTermSet -> QFCTermSet .
+  op debugPrintSize : String QFCTermSet Nat -> QFCTermSet .
+  eq debugPrintSize(SG,CS) = debugPrintSize(SG,CS,size(CS)) .
+  eq debugPrintSize(SG,CS,N) = CS [print "After Op " SG " Size: " N] .
+
+  eq form1a = Intersect(new-sop,sop1a) .
+  eq form1b = Intersect(new-sop,sop1b) .
+  eq form2  = Intersect(new-sop,sop2) .
+  eq form3  = Intersect(new-sop,sop3) .
+  eq form4  = Intersect(new-sop,sop4) .
+
+  ops strat1 strat2 : -> CmdList .
+  eq strat1 =
+   (vu
+    sbf(ibos "< kernel | netlabels(pi(N:ConcNetProcId,L1:Label,L2:Label),np NIS:NetProcInfoSet), A:AttributeSet > C:Configuration",ibos "L1:Label ~l L2:Label")
+    vu
+    sbf(ibos "< N:ConcNetProcId | A:AttributeSet > C:Configuration",ibos "netproc-req-attrs(A:AttributeSet)")
+    vu
+    sbf(ibos "< kernel | netlabels(pi(N:ConcNetProcId,L:Label,L:Label),np NIS:NetProcInfoSet), weblabels(WIS:WebProcInfoSet), A:AttributeSet > C:Configuration",
+       ibos "lbl-in-weblabels?(L:Label,WIS:WebProcInfoSet)")
+    vu
+    cu
+    sbf(ibos "< kernel | weblabels(pi(W:ConcWebProcId,L1:Label),wp pi(W':ConcWebProcId,L2:Label),wp WIS:WebProcInfoSet), A:AttributeSet > C:Configuration",
+      ibos "W:ConcWebProcId ~p W':ConcWebProcId")
+    vu
+    saf(ibos "< kernel | weblabels(WIS:WebProcInfoSet), A:AttributeSet > < N:ConcNetProcId | returnTo(PP:ConcPipeId), A2:AttributeSet > C:Configuration",
+      ibos "weblabel-by-pid(PP:ConcPipeId,WIS:WebProcInfoSet)", 'L:Label | 'nolabel.MaybeLabel)
+    vu
+    cu
+    sbf(ibos "< N1:ConcNetProcId | returnTo(W3:ConcWebProcId), A1:AttributeSet > \
+              < kernel | \
+                weblabels(pi(W3:ConcWebProcId,L3:Label),wp pi(W2:ConcWebProcId,L2:Label),wp pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), \
+                netlabels(pi(N1:ConcNetProcId,L1:Label,L1:Label),np NIS:NetProcInfoSet), \
+                A2:AttributeSet > \
+              C:Configuration",
+      ibos "W3:ConcWebProcId ~p W1:ConcWebProcId")
+    vu
+    sbf(ibos "< kernel | weblabels(pi(W:ConcWebProcId,L1:Label),wp pi(W':ConcWebProcId,L2:Label),wp WIS:WebProcInfoSet), A:AttributeSet > C:Configuration",
+      ibos "W:ConcWebProcId ~p W':ConcWebProcId")
+    vu
+    sbf(ibos "< kernel | weblabels(pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), netlabels(pi(N1:ConcNetProcId,L1:Label,L1:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              C:Configuration",
+      ibos "in-conf?(W1:ConcWebProcId,C:Configuration)")
+    vu
+    cu
+    sbf(ibos "< kernel | weblabels(pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), netlabels(pi(N1:ConcNetProcId,L1:Label,L1:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              < W1:ConcWebProcId | A:AttributeSet > C:Configuration",
+      ibos "webproc-req-attrs(A:AttributeSet)")
+    vu
+    cu
+    sbf(ibos "< kernel | weblabels(pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), netlabels(pi(N1:ConcNetProcId,L1:Label,L1:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              < W1:ConcWebProcId | URL(L2:Label), A:AttributeSet > C:Configuration",
+      ibos "L1:Label ~l L2:Label")
+    vu) .
+
+  eq strat2 =
+   (vu
+    sbf(ibos "< kernel | weblabels(pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), netlabels(pi(N1:ConcNetProcId,L1:Label,L2:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              < W1:ConcWebProcId | A1:AttributeSet > \
+              C:Configuration",
+       ibos "webproc-req-attrs(A1:AttributeSet)")
+    vu
+    cu
+    sbf(ibos "< kernel | weblabels(pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), netlabels(pi(N1:ConcNetProcId,L1:Label,L2:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              < W1:ConcWebProcId | URL(L3:Label), A1:AttributeSet > \
+              C:Configuration",
+       ibos "L1:Label ~l L3:Label")
+    vu
+    sbf(ibos "< kernel | weblabels(pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), netlabels(pi(N1:ConcNetProcId,L1:Label,L2:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              C:Configuration",
+       ibos "L1:Label ~l L2:Label")
+    vu
+    sbf(ibos "< kernel | netlabels(pi(N1:ConcNetProcId,L1:Label,L1:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              < ui | A3:AttributeSet >        \
+              < display | A4:AttributeSet >   \
+              < nic | A5:AttributeSet >       \
+              < webappmgr | A6:AttributeSet > \
+              NWC:NetWebProcConfig",
+      ibos "in-conf?(N1:ConcNetProcId,NWC:NetWebProcConfig)")
+    vu
+    cu
+    sbf(ibos "< N1:ConcNetProcId | A1:AttributeSet > C:Configuration",
+      ibos "netproc-req-attrs(A1:AttributeSet)")
+    vu
+    cu
+    sbf(ibos "< kernel | weblabels(pi(W1:ConcWebProcId,L1:Label),wp WIS:WebProcInfoSet), netlabels(pi(N1:ConcNetProcId,L1:Label,L1:Label),np NIS:NetProcInfoSet), A2:AttributeSet > \
+              < N1:ConcNetProcId | returnTo(PP:ConcPipeId), A1:AttributeSet > \
+              C:Configuration",
+      ibos "PP:ConcPipeId ~p W1:ConcWebProcId")
+    vu) .
+endm
+
+set show advisories off .
+set print conceal on .
+print conceal fmod_is_sorts_.____endfm .
+--- set print attribute on .
+
+red wellFormed(ibos,new-sop) .
+red wellFormed(ibos,sop1a) .
+red wellFormed(ibos,sop1b) .
+red wellFormed(ibos,sop2) .
+red wellFormed(ibos,sop3) .
+red wellFormed(ibos,sop4) .
+
+red transform(form1a,strat1) == noterm .
+red transform(form1b,strat1) == noterm .
+red transform(form2, strat1) == noterm .
+red transform(form3, strat1) == noterm .
+red transform(form4, strat2) == noterm .
+
+quit

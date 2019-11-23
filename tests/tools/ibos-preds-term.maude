@@ -1,0 +1,17 @@
+load ../systems/ibos-preds.maude
+load ../../mta/mta.maude
+(check-AvCrpo IBOS-PREDS assuming
+    ('NA:NeAttributeSet : 'none.AttributeSet)
+  | ('L:Label           : 'nolabel.MaybeLabel)
+  | ('Z:NzNat           : '0.Nat)
+  | ('NM:NeMessageList  : 'mt.MessageList)
+  | ('NM:NeMessageList  : 'nolist.MaybeMessageList)
+  | ('L:Label           : 'mtLL.LabelList)
+  | ('L:Label           : 'mtLS.LabelSet)
+  | ('P:ProcessId       : 'none.NullProcId)
+  | ('X:NonBlankLabel   : 'about-blank.Label)
+  | ('X:ConcNetProcId   : 'ui.UIId)
+  | ('X:ConcWebProcId   : 'ui.UIId)
+  | ('X:Message         : 'none.Message?)
+.)
+quit

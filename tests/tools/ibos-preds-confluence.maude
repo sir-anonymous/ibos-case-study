@@ -1,0 +1,168 @@
+load ../systems/ibos-preds.maude
+load ../../rltool-lib.maude
+
+mod IMPORTS is
+  pr CONFLUENCE-TOOLS .
+  pr SIMPLE-CRITPAIR .
+endm
+
+mod TEST is
+  pr IMPORTS *
+    (op __ : EquationSet EquationSet -> EquationSet to _eq_,
+     op __ : SubsortDeclSet SubsortDeclSet -> SubsortDeclSet to _sbs_
+    ) .
+
+  op pid : -> Module .
+  eq pid = upModule('PROC-ID,true) .
+
+  op mfe : -> Module .
+  eq mfe = upModule('MSG-FVP-EXT,true) .
+
+  op safe-mfe : -> Module [memo] .
+  eq safe-mfe = deleteIdEqs(removeIds(mfe,non-handled)) .
+
+  op afe : -> Module .
+  eq afe = upModule('ATTRIBUTE-FVP-EXT,true) .
+
+  op ibos : -> Module .
+  eq ibos = upModule('IBOS-PREDS,true) .
+
+  op fvp-ibos : -> Module [memo] .
+  eq fvp-ibos = removeIds(upModule('IBOS-AUX-FVP,true),non-handled) .
+
+  op noid-ibos : -> Module .
+  eq noid-ibos = removeIds(ibos,non-handled) .
+
+  op safe-ibos : -> Module [memo] .
+  eq safe-ibos = deleteIdEqs(noid-ibos) .
+
+  op round1 : -> CritPairSet .
+  eq round1 =
+    pendingCPs(
+      crcContextJoinableAndUnfeasibleCPs(noid-ibos,
+        toStdCritPairs(
+          renameCPs(
+            subsume(ibos,
+              simplify(ibos,
+                getSimpleCritPairs(safe-ibos,
+                  ('p['NWC:NetWebProcConfig,'WIS:WebProcInfoSet,'NIS:NetProcInfoSet,'M:Message?] |->
+                     ('nwp-reqattrs?  ['NWC:NetWebProcConfig] = 'true.Bool  /\
+                      'conf-attr-dupl?['NWC:NetWebProcConfig] = 'false.Bool /\
+                      'weblabels-dupl?['WIS:WebProcInfoSet]   = 'false.Bool /\
+                      'netlabels-dupl?['NIS:NetProcInfoSet]   = 'false.Bool /\
+                      'conf-dupl?     ['NWC:NetWebProcConfig] = 'false.Bool),
+                   'render-consistent?['NWC:NetWebProcConfig] |->
+                     ('conf-attr-dupl?['NWC:NetWebProcConfig] = 'false.Bool))))))))) .
+
+  op round2 : -> CritPairSet .
+  eq round2 =
+    pendingCPs(
+      crcContextJoinableAndUnfeasibleCPs(noid-ibos,
+        simpCP(ibos,
+	  delete!(simplify(
+            partialVarUnif(fvp-ibos,
+              simpCP(ibos,round1)),ibos))))) .
+
+  op round3 : -> CritPairSet .
+  eq round3 =
+    pendingCPs(
+      crcContextJoinableAndUnfeasibleCPs(removeIds(ibos,non-handled),
+        simpCP(ibos,
+          partialVarUnif(fvp-ibos,
+            transform(round2,
+              { split-cover('_<_['&2:Nat,'&1:Nat],
+                ('true.Bool  : skip )
+                ('false.Bool : skip )) }
+              { split-cover('_<_['&3:NzNat,'&2:NzNat],
+                ('true.Bool  : skip )
+                ('false.Bool : skip )) }
+              { split-cover('&0:Nat,
+                ('&0:NzNat : skip)
+                ('0.Nat    : skip)) }
+              { split-cover('&1:NzNat,
+                ('1.NzNat : skip)
+                ('_+_['1.NzNat,'&1:NzNat] : skip)) }
+              { split-cover('_<_['&0:Nat,'&2:Nat],
+                ('true.Bool  : skip )
+                ('false.Bool : skip )) }
+              { split-cover('_<_['&2:NzNat,'&3:NzNat],
+                ('true.Bool  : skip )
+                ('false.Bool : skip )) }
+              { split-cover('&0:Nat,
+                ('&0:NzNat : skip)
+                ('0.Nat    : skip)) }
+              { split-cover('&1:NzNat,
+                ('1.NzNat : skip)
+                ('_+_['1.NzNat,'&1:NzNat] : skip)) }
+              { split-cover('&2:ConcNetProcId,
+                ('network['&99:Nat] : skip)) }
+              { split-cover('&1:ConcWebProcId,
+                ('webapp['&99:Nat] : skip)) }
+              nil))))) .
+
+  --- NOTE: these symbols CANNOT be solved with standard partial FVP simplification
+  ---       so we copy them here and solve them separately
+  op special1 : -> CritPairSet .
+  eq special1 =
+    pendingCPs(
+      crcContextJoinableAndUnfeasibleCPs(noid-ibos,
+        toStdCritPairs(
+          renameCPs(
+            subsume(ibos,
+              simplify(ibos,
+                getSimpleCritPairs(safe-ibos,empty,
+                  op 'fresh-np-id? : 'ConcNetProcId 'Configuration -> 'Bool [none] .
+                  op 'fresh-wp-id? : 'ConcWebProcId 'Configuration -> 'Bool [none] .
+                  op 'fresh-weblabel? : 'ConcWebProcId 'WebProcInfoSet -> 'Bool [none] .
+                  op 'fresh-netlabel? : 'ConcNetProcId 'NetProcInfoSet -> 'Bool [none] .
+                ))))))) .
+
+  op special2 : -> CritPairSet .
+  eq special2 =
+    pendingCPs(
+      crcContextJoinableAndUnfeasibleCPs(removeIds(ibos,non-handled),
+        simpCP(ibos,
+            transform(special1,
+              { case(
+                (('&2:Nat <- '&30:Nat                ; '&1:Nat <- '_+_['&30:Nat,'&31:NzNat]) : skip )
+                (('&2:Nat <- '_+_['&30:Nat,'&31:Nat] ; '&1:Nat <- '&30:Nat                 ) : skip )) }
+              { case(
+                (('&3:NzNat <- '&30:NzNat                ; '&2:NzNat <- '_+_['&30:NzNat,'&31:NzNat]) : skip )
+                (('&3:NzNat <- '_+_['&30:NzNat,'&31:Nat] ; '&2:NzNat <- '&30:NzNat                 ) : skip )) }
+              { split-cover('&0:Nat,
+                ('&0:NzNat : skip)
+                ('0.Nat    : skip)) }
+              { split-cover('&1:NzNat,
+                ('1.NzNat : skip)
+                ('_+_['1.NzNat,'&1:NzNat] : skip)) }
+              { case(
+                (('&0:Nat <- '&30:Nat                ; '&2:Nat <- '_+_['&30:Nat,'&31:NzNat]) : skip )
+                (('&0:Nat <- '_+_['&30:Nat,'&31:Nat] ; '&2:Nat <- '&30:Nat                 ) : skip )) }
+              { case(
+                (('&2:NzNat <- '&30:NzNat                ; '&3:NzNat <- '_+_['&30:NzNat,'&31:NzNat]) : skip )
+                (('&2:NzNat <- '_+_['&30:NzNat,'&31:Nat] ; '&3:NzNat <- '&30:NzNat                 ) : skip )) }
+              { split-cover('&0:Nat,
+                ('&0:NzNat : skip)
+                ('0.Nat    : skip)) }
+              { split-cover('&1:NzNat,
+                ('1.NzNat : skip)
+                ('_+_['1.NzNat,'&1:NzNat] : skip)) }
+              nil)))) .
+endm
+
+--- set print conceal on .
+--- print conceal fmod_is_sorts_.____endfm .
+--- print conceal _eq_ _sbs_ .
+--- NOTE: based on source code check and reading CRC paper,
+---       all context-joinability/unfeasibility checks only use search
+---       so they can occur in the original module in this case
+---
+--- SIMPLE EXAMPLE
+---
+--- red pendingCPs(crcContextJoinableAndUnfeasibleCPs(safe-mfe,toStdCritPairs(renameCPs(subsume(mfe,simplify(mfe,getSimpleCritPairs(safe-mfe))))))) .
+---
+--- FULL TEST (optionally restricted to opdecls listed)
+--- generating CPs for SOP predicate with filter: only 15 minutes and 51 seconds
+red round3 .
+
+quit
